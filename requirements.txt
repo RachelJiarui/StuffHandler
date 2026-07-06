@@ -1,0 +1,7 @@
+rembg
+Pillow>=10.0
+tqdm
+onnxruntime
+openai>=1.0
+python-dotenv
+pymongo
