@@ -13,7 +13,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header>{% block header %}{% endblock %}</header>
+  <header>
+    {% block header %}{% endblock %}
+    {% if auth_enabled and request.endpoint != 'auth.login' %}<a class="logout-link" href="{{ url_for('auth.logout') }}">Log out</a>{% endif %}
+  </header>
 {% block body %}{% endblock %}
 {% block scripts %}{% endblock %}
   <script>

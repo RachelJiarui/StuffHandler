@@ -13,6 +13,7 @@ root is loaded automatically):
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -31,6 +32,9 @@ def create_app(overrides: dict | None = None) -> Flask:
         UPLOADS_DIR=os.environ.get("UPLOADS_DIR", PROJECT_ROOT / "uploads"),
         MONGO_URI=os.environ.get("MONGO_URI", "mongodb://localhost:27017"),
         MONGO_DB=os.environ.get("MONGO_DB", "stuff_handler"),
+        UPLOAD_WORKERS=int(os.environ.get("UPLOAD_WORKERS", "3")),
+        SITE_PASSWORD=os.environ.get("SITE_PASSWORD", ""),
+        SECRET_KEY=os.environ.get("SECRET_KEY", ""),
     )
     if overrides:
         app.config.update(overrides)
@@ -65,7 +69,8 @@ def create_app(overrides: dict | None = None) -> Flask:
     mark_stale_jobs(uploads_coll)
     app.extensions["gallery_uploads"] = uploads_coll
     app.extensions["gallery_processor"] = UploadProcessor(
-        uploads_coll, uploads_dir / "originals", uploads_dir / "processed"
+        uploads_coll, uploads_dir / "originals", uploads_dir / "processed",
+        workers=app.config["UPLOAD_WORKERS"],
     )
 
     from . import routes, uploads
@@ -75,5 +80,34 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(uploads.bp)
     app.jinja_env.filters["notes_html"] = notes_to_html
     app.jinja_env.globals["site_title"] = "Stuff Handler"
+    app.jinja_env.globals["auth_enabled"] = False
+
+    # Shared-password gate — only active when configured, so local/LAN-only
+    # use (no exposure beyond your own network) stays frictionless.
+    if app.config["SITE_PASSWORD"]:
+        if not app.config["SECRET_KEY"]:
+            raise SystemExit(
+                "Error: SITE_PASSWORD is set but SECRET_KEY is not. Both are "
+                "required together — SECRET_KEY signs the remember-this-"
+                "device cookie, and must stay the same across restarts and "
+                "worker processes or sessions will randomly invalidate.\n"
+                "Generate one with:\n"
+                '  python3 -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        app.secret_key = app.config["SECRET_KEY"]
+        app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=365)
+        app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+        # Cookie requires HTTPS by default (matches the deployed setup);
+        # set COOKIE_SECURE=false only to test the login flow over plain
+        # HTTP on localhost/LAN.
+        app.config["SESSION_COOKIE_SECURE"] = (
+            os.environ.get("COOKIE_SECURE", "true").lower() != "false"
+        )
+
+        from . import auth
+
+        app.register_blueprint(auth.bp)
+        auth.register_gate(app)
+        app.jinja_env.globals["auth_enabled"] = True
 
     return app

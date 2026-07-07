@@ -906,3 +906,69 @@ header .save-status {
     border-color: #b3261e;
     color: #b3261e;
 }
+
+/* Login page */
+.login-page {
+    min-height: calc(100vh - 57px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 320px;
+}
+
+.login-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    text-align: center;
+}
+
+.login-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.login-form input[type="password"] {
+    font: inherit;
+    font-size: 16px;
+    padding: 10px 2px;
+    border: none;
+    border-bottom: 1px solid #e4e1db;
+    background: transparent;
+}
+
+.login-form input[type="password"]:focus {
+    outline: none;
+    border-bottom-color: #1c1c1c;
+}
+
+.login-form .btn-primary {
+    align-self: stretch;
+    text-align: center;
+}
+
+.login-error {
+    margin: 0;
+    font-size: 13px;
+    color: #b3261e;
+}
+
+.logout-link {
+    margin-left: auto;
+    font-size: 13px;
+    color: #9a9a9a;
+    text-decoration: none;
+}
+
+.logout-link:hover {
+    color: #1c1c1c;
+}

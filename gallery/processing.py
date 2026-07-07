@@ -19,8 +19,6 @@ from pathlib import Path
 
 from PIL import Image
 
-WORKERS = 3
-
 STALE_ERROR = "Interrupted by a server restart — redo to retry."
 
 
@@ -41,10 +39,15 @@ def mark_stale_jobs(uploads) -> None:
 
 
 class UploadProcessor:
-    def __init__(self, uploads, originals_dir: Path, processed_dir: Path):
+    def __init__(self, uploads, originals_dir: Path, processed_dir: Path, workers: int = 3):
         self.uploads = uploads
         self.originals_dir = originals_dir
         self.processed_dir = processed_dir
+        # Each concurrent job can hold its own onnxruntime session in
+        # memory at once — on a memory-constrained deployment this should
+        # be dropped to 1 (serialize processing) rather than left at the
+        # dev-machine default.
+        self.workers = max(1, workers)
         self._queue: queue.Queue = queue.Queue()
         self._start_lock = threading.Lock()
         self._started = False
@@ -79,7 +82,7 @@ class UploadProcessor:
     def enqueue(self, upload_id: str) -> None:
         with self._start_lock:
             if not self._started:
-                for _ in range(WORKERS):
+                for _ in range(self.workers):
                     threading.Thread(target=self._worker, daemon=True).start()
                 self._started = True
         self._queue.put(upload_id)

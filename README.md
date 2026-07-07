@@ -82,6 +82,9 @@ Configuration is via environment variables / `.env` (no CLI flags):
 | `MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection string |
 | `MONGO_DB` | `stuff_handler` | database name |
 | `PORT` | `8000` | dev server port (`wsgi.py` only; gunicorn uses `-b`) |
+| `UPLOAD_WORKERS` | `3` | concurrent processing threads (see note below) |
+| `SITE_PASSWORD` / `SECRET_KEY` | unset (no gate) | shared-password login — see below |
+| `COOKIE_SECURE` | `true` | set `false` to test the login flow over plain HTTP |
 
 ### Uploading from the browser (`/upload`)
 
@@ -113,7 +116,22 @@ marked failed on the next boot so you can redo them.
 
 Note: processing threads live inside the web process, so with
 `gunicorn -w 2` each upload is processed by whichever worker accepted it —
-fine for one user; keep it in mind before scaling workers.
+fine for one user; keep it in mind before scaling workers. `UPLOAD_WORKERS`
+controls how many photos process *concurrently within one worker process*
+(default 3) — each holds its own rembg/onnxruntime session in memory at
+once, so on a memory-constrained deployment (see `DEPLOY.md`) drop this to
+`1` to serialize processing instead of risking an OOM kill.
+
+### Access control
+
+By default the site has no login — fine on localhost or a trusted LAN.
+Setting `SITE_PASSWORD` (plus a `SECRET_KEY` to sign the cookie) turns on
+a simple shared-password gate: one password for everyone you give it to,
+entered once per browser via `/login`, then remembered for a year via a
+signed cookie. It's not per-user auth and there's no rate-limiting beyond
+what a constant-time comparison buys you — appropriate for low-stakes data
+shared with a small trusted group, not for anything sensitive. `/logout`
+forces re-entry on that device. See `.env.example` for the exact variables.
 
 **Stop:** `Ctrl+C`, or if backgrounded: `pkill -f "wsgi.py"` / `pkill -f gunicorn`.
 
@@ -130,10 +148,11 @@ Fly.io, a VPS behind nginx…). Install `requirements-web.txt` only and run
   ephemeral filesystems need a persistent volume, or the photos baked into
   the deploy.
 
-⚠️ There is no authentication — anyone who can reach the site can view and
-edit everything. Keep it on localhost/a private network, or put auth in
-front (e.g. Cloudflare Access, an nginx basic-auth block, or a Tailscale
-network) before exposing it publicly.
+⚠️ By default there is no authentication — anyone who can reach the site
+can view and edit everything, and trigger OpenAI-billed uploads. Either
+keep it on localhost/a private network, or turn on `SITE_PASSWORD` (see
+above) before exposing it publicly. See `DEPLOY.md` for the Google Cloud
+setup this project actually runs on.
 
 ## Data
 
