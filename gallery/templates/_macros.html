@@ -1,0 +1,23 @@
+{# Strict label picker (see edit.js initTagInputs): a dropdown of the known
+   vocabulary, filtered by typing — new labels only via the explicit
+   "Make this a new label" row, never by freeform typing. #}
+{% macro combobox(name, label, values, options, placeholder, single) -%}
+{% set list_id = name.replace('_', '-') ~ '-options' %}
+<label>
+  <span class="field-label">{{ label }}</span>
+  <div class="tag-input" data-name="{{ name }}"{% if single %} data-single{% endif %}>
+    <div class="tags"></div>
+    <input type="text" class="tag-entry" data-suggestions="{{ list_id }}" placeholder="{{ placeholder }}">
+    <input type="hidden" name="{{ name }}" class="tag-value" value="{{ values|join(',') }}">
+  </div>
+  <datalist id="{{ list_id }}">{% for v in options %}<option value="{{ v }}">{% endfor %}</datalist>
+</label>
+{%- endmacro %}
+
+{% macro checkbox_group(field, choices, selected) -%}
+<div class="checkbox-group">
+  {%- for choice in choices -%}
+  <label class="checkbox"><input type="checkbox" name="{{ field }}" value="{{ choice }}"{% if choice in selected %} checked{% endif %}> {{ choice.replace('-', ' ')|capitalize }}</label>
+  {%- endfor -%}
+</div>
+{%- endmacro %}

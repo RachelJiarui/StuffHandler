@@ -1,0 +1,21 @@
+{# The results grid. Also rendered standalone for async search responses,
+   whose HTML the client swaps into #results in place (see search.js). #}
+{% if not matched %}
+<p class="empty">{% if query %}No items match your search.{% else %}No items match the selected filters.{% endif %} <a href="/">Clear search</a></p>
+{% else %}
+<div class="grid">
+  {%- for path in matched %}
+  {%- set item = items_map.get(path.name, empty_item) %}
+  {%- set display_name = item.name or path.stem %}
+  <div class="item">
+    <a class="thumb" href="/edit/{{ path.name|urlencode }}">
+      <img src="/photos/{{ path.name|urlencode }}" alt="{{ display_name }}" loading="lazy">
+    </a>
+    <div class="caption">
+      <span class="idx">{{ '%02d'|format(loop.index) }}</span>
+      <span class="name">{{ display_name }}</span>
+    </div>
+  </div>
+  {%- endfor %}
+</div>
+{% endif %}

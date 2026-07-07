@@ -1,0 +1,47 @@
+{# Staging-queue cards. Rendered on the upload page and re-rendered by the
+   /upload/status poll, whose HTML the client swaps into #queue (upload.js). #}
+{% if not uploads %}
+<p class="empty">Nothing waiting — photos you upload appear here while they process, then get labeled into the closet.</p>
+{% else %}
+<div class="queue-grid">
+  {%- for u in uploads %}
+  <div class="ucard status-{{ u.status }}"
+       data-id="{{ u.id }}"
+       data-status="{{ u.status }}"
+       data-has-processed="{{ 1 if u.has_processed else 0 }}"
+       data-enhance="{{ 1 if u.enhance else 0 }}"
+       data-remove-bg="{{ 1 if u.remove_bg else 0 }}"
+       data-message="{{ u.message or '' }}">
+    {#- A processing photo is untouchable (no select/redo/delete) — its only
+        action is Stop, below. #}
+    {%- if u.status != 'processing' %}
+    <label class="ucard-select"><input type="checkbox" class="ucard-check" aria-label="Select {{ u.original_filename }}"></label>
+    {%- endif %}
+    {%- set v = 'processed' if u.status == 'done' and u.has_processed else 'original' %}
+    <div class="ucard-thumb">
+      <img src="/upload/photo/{{ u.id }}?v={{ v }}&t={{ u.updated_at|urlencode }}" alt="{{ u.original_filename }}" loading="lazy">
+    </div>
+    <div class="ucard-info">
+      <span class="ucard-name" title="{{ u.original_filename }}">{{ u.original_filename }}</span>
+      {%- if u.status == 'processing' %}
+      <span class="ucard-status" title="{{ u.run_summary }}"><span class="spinner"></span> Processing…</span>
+      {%- elif u.status == 'done' %}
+      <span class="ucard-status ok" title="{{ u.run_summary }}">✓ Ready to label</span>
+      {%- else %}
+      <span class="ucard-status err" title="{{ u.error }}">⚠ Failed</span>
+      {%- endif %}
+      {%- if u.status == 'failed' and u.error %}<span class="ucard-error">{{ u.error }}</span>{% endif %}
+    </div>
+    <div class="ucard-actions">
+      {%- if u.status == 'processing' %}
+      <button type="button" class="btn-small btn-danger stop-one" title="Stop processing and revert this photo">Stop</button>
+      {%- else %}
+      {%- if u.status == 'done' %}<a class="btn-small btn-label" href="/upload/label/{{ u.id }}">Label →</a>{% endif %}
+      <button type="button" class="btn-small redo-one">Redo</button>
+      <button type="button" class="btn-small btn-danger delete-one">Delete</button>
+      {%- endif %}
+    </div>
+  </div>
+  {%- endfor %}
+</div>
+{% endif %}

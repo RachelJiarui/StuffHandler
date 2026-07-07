@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Add items — {{ site_title }}{% endblock %}
+
+{% block header %}
+    <a class="title" href="/">← {{ site_title }}</a>
+    <span class="count">Add items</span>
+{% endblock %}
+
+{% block body %}
+  <main class="upload-page">
+    <form id="upload-form" class="upload-form" method="post" action="/upload" enctype="multipart/form-data">
+      <label class="file-drop" id="file-drop">
+        <input type="file" name="photos" id="file-input" accept="image/*,.heic,.heif" multiple hidden>
+        <span class="file-drop-hint">Tap to choose photos<br><small>or drag them here</small></span>
+        <div class="file-previews" id="file-previews"></div>
+      </label>
+
+      <div class="upload-options">
+        <label class="checkbox"><input type="checkbox" name="remove_bg" checked> Remove background</label>
+        <label class="checkbox"><input type="checkbox" name="enhance" id="opt-enhance" checked> Clean up with AI</label>
+        <label class="message-field" id="message-field">
+          <span class="field-label">Helpful message for the AI (optional)</span>
+          <textarea name="message" rows="2" maxlength="500" placeholder="e.g. it's a navy zip-up hoodie — keep the drawstrings visible"></textarea>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary" id="upload-btn" disabled>Upload &amp; process</button>
+      <p class="upload-errors" id="upload-errors" hidden></p>
+    </form>
+
+    <section class="queue-section">
+      <div class="queue-header">
+        <h2 class="section-title">Processing queue</h2>
+        <div class="queue-toolbar" id="queue-toolbar" hidden>
+          <span id="selected-count"></span>
+          <button type="button" class="btn-small" id="redo-selected">Redo</button>
+          <button type="button" class="btn-small btn-danger" id="delete-selected">Delete</button>
+          <button type="button" class="btn-small" id="clear-selection">Clear</button>
+        </div>
+      </div>
+      <div id="queue" data-processing="{{ processing }}">
+        {% include "_queue.html" %}
+      </div>
+    </section>
+  </main>
+
+  <dialog id="redo-dialog" class="redo-dialog">
+    <form method="dialog" class="redo-form">
+      <h3 id="redo-title">Redo processing</h3>
+      <div class="field-block">
+        <span class="field-label">Start from</span>
+        <label class="checkbox"><input type="radio" name="redo-source" value="original" checked> Original photo</label>
+        <label class="checkbox"><input type="radio" name="redo-source" value="processed" id="redo-source-processed"> Current processed result</label>
+      </div>
+      <div class="field-block">
+        <span class="field-label">Steps</span>
+        <label class="checkbox"><input type="checkbox" id="redo-remove-bg" checked> Remove background</label>
+        <label class="checkbox"><input type="checkbox" id="redo-enhance" checked> Clean up with AI</label>
+      </div>
+      <label class="message-field" id="redo-message-field">
+        <span class="field-label">Helpful message for the AI (optional)</span>
+        <textarea id="redo-message" rows="2" maxlength="500"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn-small" id="redo-cancel">Cancel</button>
+        <button type="button" class="btn-primary" id="redo-run">Run</button>
+      </div>
+    </form>
+  </dialog>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='upload.js') }}" defer></script>
+{% endblock %}

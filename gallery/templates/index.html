@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block header %}
+    <span class="title">{{ site_title }}</span>
+    <a class="header-link" href="/upload">＋ Add items</a>
+    {% if images %}{% include "_search_bar.html" %}{% endif %}
+    <span class="count">{{ count_text }}</span>
+{% endblock %}
+
+{% block body %}
+  <main id="results">
+    {%- if not images %}
+    <p class="empty">No images found in {{ directory }}.</p>
+    {%- else %}
+    {% include "_results.html" %}
+    {%- endif %}
+  </main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='search.js') }}" defer></script>
+{% endblock %}

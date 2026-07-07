@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_macros.html" import combobox, checkbox_group %}
+
+{% block title %}Label {{ upload.original_filename }} — {{ site_title }}{% endblock %}
+
+{% block header %}
+    <a class="title" href="/upload">← Add items</a>
+    <span class="count">{{ upload.original_filename }}</span>
+{% endblock %}
+
+{% block body %}
+  <div class="edit-layout">
+    <div class="edit-image">
+      <img src="/upload/photo/{{ upload_id }}?v=processed&t={{ upload.updated_at|urlencode }}" alt="{{ upload.original_filename }}">
+    </div>
+    {# data-no-autosave: unlike the edit page, nothing exists to autosave
+       into yet — the item is only created on explicit submit. #}
+    <form class="edit-form" method="post" action="/upload/label/{{ upload_id }}" data-no-autosave>
+      <label>
+        <span class="field-label">Name (required)</span>
+        <textarea name="name" class="name-input" rows="1" required placeholder="Name this item"></textarea>
+      </label>
+      {{ combobox("category", "Category", [], category_vocab, "Select a category", single=true) }}
+      {{ combobox("brand", "Brand", [], brand_vocab, "Select a brand", single=true) }}
+      {{ combobox("colors_pattern", "Colors & Pattern", [], colors_pattern_vocab, "Add a color or pattern", single=false) }}
+      {{ combobox("size", "Size", [], size_vocab, "Select a size", single=true) }}
+      <label>
+        <span class="field-label">Occasion</span>
+        <select name="occasion">
+          <option value="">—</option>
+          {%- for o in occasions %}
+          <option value="{{ o }}">{{ o.replace('-', ' ')|capitalize }}</option>
+          {%- endfor %}
+        </select>
+      </label>
+
+      <details class="more-details">
+        <summary>More details</summary>
+        <div class="more-details-body">
+          <div class="field-block">
+            <span class="field-label">Condition</span>
+            {{ checkbox_group("condition", conditions, ["good"]) }}
+          </div>
+          <div class="notes-field">
+            <span class="field-label">Notes</span>
+            <div class="notes-editor" contenteditable="true" data-placeholder="Anything worth remembering…"></div>
+            <textarea name="notes" class="notes-raw" hidden></textarea>
+          </div>
+        </div>
+      </details>
+
+      <button type="submit" class="btn-primary">Add to closet</button>
+    </form>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='edit.js') }}" defer></script>
+{% endblock %}

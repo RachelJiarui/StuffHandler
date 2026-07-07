@@ -1,0 +1,13 @@
+# Gallery website (gallery/ package, served via wsgi.py).
+#
+# The upload page runs the processing pipeline in-process (background
+# threads), so the pipeline deps from requirements.txt are needed here too.
+flask>=3.0
+pymongo
+python-dotenv
+gunicorn
+Pillow>=10.0
+pillow-heif
+rembg
+onnxruntime
+openai>=1.0

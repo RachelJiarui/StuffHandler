@@ -441,6 +441,9 @@
   function initAutosave(syncNotesToRaw) {
     var form = document.querySelector(".edit-form");
     if (!form) return null;
+    // The label page (data-no-autosave) creates the item only on explicit
+    // submit — autosaving would try to save an item that doesn't exist yet.
+    if (form.hasAttribute("data-no-autosave")) return null;
     var status = document.querySelector(".save-status");
     var timer = null;
 
@@ -500,5 +503,16 @@
     });
     var saveNow = autosave ? autosave.saveNow : function () { return Promise.resolve(); };
     notes = initNotesEditor(saveNow);
+
+    // No autosave (label page): the form submits natively, so flush the
+    // notes editor into its hidden textarea right before submission.
+    if (!autosave) {
+      var form = document.querySelector(".edit-form");
+      if (form) {
+        form.addEventListener("submit", function () {
+          if (notes) notes.syncToRaw();
+        });
+      }
+    }
   });
 })();

@@ -540,3 +540,334 @@ header .save-status {
         box-shadow: none;
     }
 }
+
+/* Buttons (upload + label pages) */
+.btn-primary {
+    align-self: flex-start;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 22px;
+    background: #1c1c1c;
+    color: #fff;
+    border: 1px solid #1c1c1c;
+    cursor: pointer;
+}
+
+.btn-primary:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.btn-small {
+    font: inherit;
+    font-size: 12px;
+    padding: 5px 10px;
+    background: #fff;
+    color: #1c1c1c;
+    border: 1px solid #cfcbc4;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-small:hover {
+    border-color: #1c1c1c;
+}
+
+.btn-danger:hover {
+    border-color: #b3261e;
+    color: #b3261e;
+}
+
+.btn-label {
+    background: #1c1c1c;
+    color: #fff;
+    border-color: #1c1c1c;
+}
+
+/* Header link to the upload page */
+.header-link {
+    font-size: 13px;
+    color: #1a4fd6;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+/* Upload page */
+.upload-page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+}
+
+.upload-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.file-drop {
+    display: block;
+    border: 1px dashed #b9b4ab;
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.file-drop.dragover {
+    border-color: #1c1c1c;
+    background: #f7f5f2;
+}
+
+.file-drop-hint {
+    font-size: 14px;
+    color: #6b6b6b;
+    line-height: 1.6;
+}
+
+.file-drop-hint small {
+    color: #9a9a9a;
+}
+
+.file-previews {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+.file-previews:empty {
+    display: none;
+    margin-top: 0;
+}
+
+.file-preview {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    background: #f2f2f2;
+    border: 1px solid #e4e1db;
+}
+
+.file-preview-chip {
+    font-size: 12px;
+    padding: 6px 10px;
+    border: 1px solid #e4e1db;
+    background: #f7f5f2;
+    align-self: center;
+}
+
+.upload-options {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 480px;
+}
+
+.upload-options .checkbox,
+.redo-form .checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.message-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.message-field textarea {
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 2px;
+    border: none;
+    border-bottom: 1px solid #e4e1db;
+    border-radius: 0;
+    background: transparent;
+    resize: vertical;
+}
+
+.message-field textarea:focus {
+    outline: none;
+    border-bottom-color: #1c1c1c;
+}
+
+.upload-errors {
+    color: #b3261e;
+    font-size: 13px;
+    margin: 0;
+}
+
+/* Processing queue */
+.queue-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.queue-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-height: 28px;
+}
+
+.section-title {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #9a9a9a;
+    margin: 0;
+}
+
+.queue-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #6b6b6b;
+}
+
+.queue-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.ucard {
+    border: 1px solid #e4e1db;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.ucard.status-failed {
+    border-color: #e0b4b1;
+}
+
+.ucard-select {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+}
+
+.ucard-thumb {
+    aspect-ratio: 4 / 3;
+    background: #f2f2f2;
+    overflow: hidden;
+}
+
+.ucard-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.ucard.status-processing .ucard-thumb img {
+    opacity: 0.45;
+}
+
+.ucard-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px 0;
+}
+
+.ucard-name {
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ucard-status {
+    font-size: 12px;
+    color: #6b6b6b;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ucard-status.ok {
+    color: #1b7f3b;
+}
+
+.ucard-status.err {
+    color: #b3261e;
+}
+
+.ucard-error {
+    font-size: 11px;
+    color: #b3261e;
+}
+
+.ucard-actions {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    margin-top: auto;
+}
+
+.spinner {
+    width: 11px;
+    height: 11px;
+    border: 2px solid #cfcbc4;
+    border-top-color: #1c1c1c;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Redo dialog */
+.redo-dialog {
+    border: 1px solid #e4e1db;
+    padding: 24px;
+    max-width: 420px;
+    width: calc(100vw - 48px);
+    font-family: "Chivo", sans-serif;
+    color: #1c1c1c;
+}
+
+.redo-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.redo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.redo-form h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.redo-form .field-block {
+    max-width: none;
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.edit-form .btn-primary {
+    margin-top: 8px;
+}

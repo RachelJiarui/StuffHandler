@@ -1,7 +1,8 @@
+# Processing pipeline (process.py). The gallery website's deps live in
+# requirements-web.txt so a web deploy doesn't drag in onnxruntime/rembg.
 rembg
 Pillow>=10.0
 tqdm
 onnxruntime
 openai>=1.0
 python-dotenv
-pymongo

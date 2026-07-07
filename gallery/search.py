@@ -7,7 +7,6 @@ Operates purely on normalized item dicts (see db.normalize_item) and Paths
 import difflib
 import re
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
 
 FACET_FIELDS = ["category", "brand", "colors_pattern", "size", "occasion", "condition"]
 LIST_FACETS = {"brand", "colors_pattern", "size", "condition"}
@@ -93,8 +92,9 @@ def score_item(query_terms: list[str], haystacks: dict[str, str]) -> float | Non
     return total
 
 
-def parse_search_params(path: str) -> tuple[str, dict[str, list[str]]]:
-    query_params = parse_qs(urlsplit(path).query)
+def parse_search_params(query_params: dict[str, list[str]]) -> tuple[str, dict[str, list[str]]]:
+    """query_params is a mapping of param name -> list of values, e.g.
+    Flask's request.args.to_dict(flat=False) or urllib's parse_qs output."""
     q = query_params.get("q", [""])[0].strip()
     filters = {
         field: [v.strip() for v in query_params.get(field, []) if v.strip()]

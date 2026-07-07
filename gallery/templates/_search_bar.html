@@ -1,0 +1,19 @@
+{% from "_macros.html" import checkbox_group %}
+<form method="get" action="/" class="search-form" id="search-form">
+  <input type="search" name="q" value="{{ query }}" placeholder="Search name, brand, notes…" class="search-input">
+  <details class="more-details filters-panel"{% if filters %} open{% endif %}>
+    <summary>Filters <span class="filter-count"{% if not active_count %} hidden{% endif %}>({{ active_count }})</span></summary>
+    <div class="filters-body">
+      {%- for facet in facet_fields %}
+      {%- set choices = facet_vocab[facet] %}
+      {%- if choices %}
+      <div class="filter-group field-block{% if choices|length > 8 %} scrollable{% endif %}">
+        <span class="field-label">{{ facet_labels[facet] }}</span>
+        {{ checkbox_group(facet, choices, filters.get(facet, [])) }}
+      </div>
+      {%- endif %}
+      {%- endfor %}
+    </div>
+  </details>
+  <a href="/" class="clear-filters"{% if not (query or filters) %} hidden{% endif %}>Clear</a>
+</form>

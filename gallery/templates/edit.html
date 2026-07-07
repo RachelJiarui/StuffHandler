@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import combobox, checkbox_group %}
+
+{% block title %}{{ name }} — {{ site_title }}{% endblock %}
+
+{% block header %}
+    <a class="title" href="/">← {{ site_title }}</a>
+    <span class="save-status"></span>
+{% endblock %}
+
+{% block body %}
+  <div class="edit-layout">
+    <div class="edit-image">
+      <img src="/photos/{{ filename|urlencode }}" alt="{{ name }}">
+    </div>
+    <form class="edit-form" method="post" action="/edit/{{ filename|urlencode }}">
+      <label>
+        <span class="field-label">Name</span>
+        <textarea name="name" class="name-input" rows="1" placeholder="{{ stem }}">{{ name }}</textarea>
+      </label>
+      {{ combobox("category", "Category", [item.category] if item.category else [],
+                  category_vocab, "Select a category", single=true) }}
+      {{ combobox("brand", "Brand", item.brand,
+                  brand_vocab, "Select a brand", single=true) }}
+      {{ combobox("colors_pattern", "Colors & Pattern", item.colors_pattern,
+                  colors_pattern_vocab, "Add a color or pattern", single=false) }}
+      {{ combobox("size", "Size", item.size,
+                  size_vocab, "Select a size", single=true) }}
+      <label>
+        <span class="field-label">Occasion</span>
+        <select name="occasion">
+          <option value="">—</option>
+          {%- for o in occasions %}
+          <option value="{{ o }}"{% if o == item.occasion %} selected{% endif %}>{{ o.replace('-', ' ')|capitalize }}</option>
+          {%- endfor %}
+        </select>
+      </label>
+
+      <details class="more-details">
+        <summary>More details</summary>
+        <div class="more-details-body">
+          <div class="field-block">
+            <span class="field-label">Condition</span>
+            {{ checkbox_group("condition", conditions, condition_selected) }}
+          </div>
+          <div class="field-block">
+            <span class="field-label">Created</span>
+            <span class="readonly-value">{{ created_display }}</span>
+          </div>
+          <div class="notes-field">
+            <span class="field-label">Notes</span>
+            <div class="notes-editor" contenteditable="true" data-placeholder="Type @ to mention a closet item, ⌘K to link…">{{ item.notes|notes_html }}</div>
+            <textarea name="notes" class="notes-raw" hidden>{{ item.notes }}</textarea>
+          </div>
+        </div>
+      </details>
+    </form>
+  </div>
+  <script type="application/json" id="mention-data">{{ mentions_json|safe }}</script>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='edit.js') }}" defer></script>
+{% endblock %}
