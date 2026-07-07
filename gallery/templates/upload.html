@@ -15,6 +15,11 @@
         <span class="file-drop-hint">Tap to choose photos<br><small>or drag them here</small></span>
         <div class="file-previews" id="file-previews"></div>
       </label>
+      {# Shown by upload.js on mobile devices only: capture=environment
+         opens the camera directly, one shot at a time, accumulating into
+         the same pending list as picked files. #}
+      <button type="button" class="btn-small camera-btn" id="camera-btn" hidden>📷 Take a photo</button>
+      <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
 
       <div class="upload-options">
         <label class="checkbox"><input type="checkbox" name="remove_bg" checked> Remove background</label>

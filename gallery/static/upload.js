@@ -87,30 +87,80 @@
       return /image\/hei[cf]/.test(file.type) || /\.hei[cf]$/i.test(file.name);
     }
 
+    // Pending files live in this array, not in the input: the camera hands
+    // over one shot at a time and pickers replace their selection, so both
+    // are harvested into here (deduped) and the input cleared. Submit sends
+    // this list. With JS off the input keeps its files and the form posts
+    // natively, so nothing breaks.
+    var fileStore = [];
+
+    function fileKey(f) {
+      return f.name + "|" + f.size + "|" + f.lastModified;
+    }
+
+    function addFiles(list) {
+      Array.prototype.forEach.call(list, function (f) {
+        var dup = fileStore.some(function (g) { return fileKey(g) === fileKey(f); });
+        if (!dup) fileStore.push(f);
+      });
+      syncFiles();
+    }
+
     function syncFiles() {
       previews.innerHTML = "";
-      Array.prototype.forEach.call(input.files, function (f) {
+      fileStore.forEach(function (f, i) {
+        var item = document.createElement("span");
+        item.className = "file-preview-item";
         if (isHeic(f)) {
           // Browsers can't render HEIC in an <img> — show a name chip.
           var chip = document.createElement("span");
           chip.className = "file-preview-chip";
           chip.textContent = f.name;
-          previews.appendChild(chip);
+          item.appendChild(chip);
         } else {
           var img = document.createElement("img");
           img.className = "file-preview";
           img.src = URL.createObjectURL(f);
           img.onload = function () { URL.revokeObjectURL(img.src); };
-          previews.appendChild(img);
+          item.appendChild(img);
         }
+        var rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "file-preview-remove";
+        rm.setAttribute("aria-label", "Remove " + f.name);
+        rm.textContent = "×";
+        rm.addEventListener("click", function (e) {
+          // The previews sit inside the file-drop <label>; stop the click
+          // from also opening the file picker.
+          e.preventDefault();
+          e.stopPropagation();
+          fileStore.splice(i, 1);
+          syncFiles();
+        });
+        item.appendChild(rm);
+        previews.appendChild(item);
       });
-      btn.disabled = !input.files.length;
-      btn.textContent = input.files.length
-        ? "Upload & process (" + input.files.length + ")"
+      btn.disabled = !fileStore.length;
+      btn.textContent = fileStore.length
+        ? "Upload & process (" + fileStore.length + ")"
         : "Upload & process";
     }
 
-    input.addEventListener("change", syncFiles);
+    input.addEventListener("change", function () {
+      addFiles(input.files);
+      input.value = ""; // harvested; also lets re-picking the same file fire change
+    });
+
+    // Mobile devices get a button that opens the camera directly
+    // (capture=environment = rear camera), one shot at a time.
+    var camBtn = document.getElementById("camera-btn");
+    var camInput = document.getElementById("camera-input");
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) camBtn.hidden = false;
+    camBtn.addEventListener("click", function () { camInput.click(); });
+    camInput.addEventListener("change", function () {
+      addFiles(camInput.files);
+      camInput.value = "";
+    });
 
     drop.addEventListener("dragover", function (e) {
       e.preventDefault();
@@ -122,22 +172,24 @@
     drop.addEventListener("drop", function (e) {
       e.preventDefault();
       drop.classList.remove("dragover");
-      if (e.dataTransfer.files.length) {
-        input.files = e.dataTransfer.files;
-        syncFiles();
-      }
+      if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
     });
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      if (!input.files.length) return;
+      if (!fileStore.length) return;
       btn.disabled = true;
       btn.textContent = "Uploading…";
       errsEl.hidden = true;
 
+      // FormData(form) carries the option fields; the photos come from
+      // fileStore (the input itself is always empty on the JS path).
+      var body = new FormData(form);
+      fileStore.forEach(function (f) { body.append("photos", f, f.name); });
+
       fetch("/upload", {
         method: "POST",
-        body: new FormData(form),
+        body: body,
         headers: { "X-Requested-With": "fetch" },
       })
         .then(function (r) { return r.json(); })
@@ -148,7 +200,7 @@
               .join(" · ");
             errsEl.hidden = false;
           }
-          input.value = "";
+          fileStore = [];
           applyQueue(data);
         })
         .catch(function () {
