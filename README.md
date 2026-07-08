@@ -12,11 +12,12 @@ cd /Users/Rachel/Development/RANDOM/stuff-handler
 python3 -m venv .venv                          # already exists, skip if present
 .venv/bin/pip install -r requirements.txt      # processing pipeline deps
 .venv/bin/pip install -r requirements-web.txt  # gallery website deps
-cp .env.example .env                           # then fill in OPENAI_API_KEY
+cp .env.example .env                           # then fill in OPENAI_API_KEY, GCP_PROJECT
+gcloud auth application-default login          # lets the gallery website reach Firestore
 ```
 
 `.env` holds `OPENAI_API_KEY` (pipeline enhance step) and optional gallery
-overrides (`PHOTOS_DIR`, `MONGO_URI`, `MONGO_DB`, `PORT`).
+overrides (`PHOTOS_DIR`, `GCP_PROJECT`, `PORT`).
 
 ## Processing pipeline
 
@@ -33,32 +34,26 @@ Run `.venv/bin/python3 process.py --help` for brightness/contrast/model flags.
 
 A Flask app (`gallery/` package) that browses `done_output/` (default) in a
 grid and lets you edit each photo's Name/Category/Brand/etc. (saved to
-MongoDB). Layout:
+Firestore). Layout:
 
 ```
 wsgi.py                  entry point (dev server + gunicorn target)
 gallery/
-  __init__.py            app factory (create_app), config, Mongo connection
+  __init__.py            app factory (create_app), config, Firestore client
   routes.py              HTTP routes (index/search, edit, photo serving)
   uploads.py             upload/staging routes (/upload, redo, label)
   processing.py          background job runner for the upload pipeline
-  db.py                  Mongo-facing data shaping
+  db.py                  Firestore-facing data shaping
   search.py              query parsing, filtering, relevance scoring
   notes.py               notes-markup → HTML filter
   templates/             Jinja2 templates (base, index, edit, upload, label…)
   static/                CSS + JS, PWA manifest/service worker/icons
 ```
 
-**Start MongoDB** (if not already running):
-
-```bash
-brew services start mongodb-community
-# check: brew services list | grep mongo
-```
-
-Note: this is your one shared local `mongod` — it also holds other
-projects' databases (`GameNiteLocalDev`, `chat_app_db`, etc.), so leave it
-running if other apps need it rather than stopping it after this project.
+Data lives in Firestore (GCP project `stuff-handler-app`, collections
+`items` and `uploads`), authenticated via Application Default Credentials —
+`gcloud auth application-default login` locally, or the deployed VM's
+attached service account (see `DEPLOY.md`). No local database to start.
 
 **Run (development)** — debug mode with auto-reload:
 
@@ -79,8 +74,7 @@ Configuration is via environment variables / `.env` (no CLI flags):
 |---|---|---|
 | `PHOTOS_DIR` | `done_output/` | folder of images to display |
 | `UPLOADS_DIR` | `uploads/` | staging area for the upload flow (originals + processed) |
-| `MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection string |
-| `MONGO_DB` | `stuff_handler` | database name |
+| `GCP_PROJECT` | ADC's default project | GCP project holding the Firestore database |
 | `PORT` | `8000` | dev server port (`wsgi.py` only; gunicorn uses `-b`) |
 | `UPLOAD_WORKERS` | `3` | concurrent processing threads (see note below) |
 | `SITE_PASSWORD` / `SECRET_KEY` | unset (no gate) | shared-password login — see below |
@@ -106,12 +100,12 @@ The "＋ Add items" link on the grid opens the upload page:
    (edit the helpful message, start from the original or from the current
    processed result).
 4. **Label →** opens the item form; Name is the only required field.
-   Saving moves the processed PNG into `PHOTOS_DIR` and creates the Mongo
-   item — from then on it's on the grid and searchable.
+   Saving moves the processed PNG into `PHOTOS_DIR` and creates the
+   Firestore item — from then on it's on the grid and searchable.
 
 Staged files live in `uploads/originals/` and `uploads/processed/`
 (gitignored). Originals are kept after labeling. Job state is in the
-`uploads` Mongo collection; jobs interrupted by a server restart are
+`uploads` Firestore collection; jobs interrupted by a server restart are
 marked failed on the next boot so you can redo them.
 
 Note: processing threads live inside the web process, so with
@@ -137,12 +131,14 @@ forces re-entry on that device. See `.env.example` for the exact variables.
 
 ## Deploying
 
-The app is a standard WSGI app, so any Python host works (Render, Railway,
-Fly.io, a VPS behind nginx…). Install `requirements-web.txt` only and run
-`gunicorn wsgi:app`. Two things must move with it:
+The app is a standard WSGI app, so any Python host works. Install
+`requirements-web.txt` only and run `gunicorn wsgi:app`. Two things must
+move with it:
 
-- **MongoDB** — point `MONGO_URI` at a managed instance (e.g. MongoDB Atlas
-  free tier) instead of localhost.
+- **Firestore** — the deploy target's identity (a VM's service account, a
+  container's workload identity, etc.) needs the `Cloud Datastore User`
+  IAM role _and_ an OAuth scope that includes `datastore`/`cloud-platform`
+  — IAM role alone isn't sufficient on GCE, see `DEPLOY.md`.
 - **Photos** — the app serves images straight from `PHOTOS_DIR` on disk, so
   the folder must be uploaded to (and persist on) the server. Hosts with
   ephemeral filesystems need a persistent volume, or the photos baked into
@@ -151,23 +147,31 @@ Fly.io, a VPS behind nginx…). Install `requirements-web.txt` only and run
 ⚠️ By default there is no authentication — anyone who can reach the site
 can view and edit everything, and trigger OpenAI-billed uploads. Either
 keep it on localhost/a private network, or turn on `SITE_PASSWORD` (see
-above) before exposing it publicly. See `DEPLOY.md` for the Google Cloud
-setup this project actually runs on.
+above) before exposing it publicly. See `DEPLOY.md` for the actual Google
+Cloud setup this project runs on, including real-world memory/timing
+numbers for the low-cost VM tier.
 
 ## Data
 
 - Photos live on disk in `done_input/` / `done_output/` — the gallery never
   copies or modifies them, just reads and displays.
-- Name/Category tags live in MongoDB: db `stuff_handler`, collection `items`,
-  one document per filename (`_id` = filename). Inspect with:
+- Name/Category tags live in Firestore (GCP project `stuff-handler-app`),
+  collection `items`, one document per filename (document ID = filename).
+  Inspect with:
 
 ```bash
-mongosh stuff_handler --eval "db.items.find().pretty()"
+.venv/bin/python3 -c "
+from google.cloud import firestore
+fs = firestore.Client(project='stuff-handler-app')
+for doc in fs.collection('items').stream():
+    print(doc.id, doc.to_dict())
+"
 ```
 
 ## Ports / services in use
 
 | What | Address | Notes |
 |---|---|---|
-| Gallery website | `localhost:8000` (default) | stop with Ctrl+C / `pkill -f gunicorn` |
-| MongoDB | `localhost:27017` | shared across projects, managed via `brew services` |
+| Gallery website (local dev) | `localhost:8000` (default) | stop with Ctrl+C / `pkill -f gunicorn` |
+| Deployed site | `https://104-198-23-54.nip.io` | see `DEPLOY.md` |
+| Firestore | GCP project `stuff-handler-app` | no local service to run |

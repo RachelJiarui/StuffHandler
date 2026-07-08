@@ -1,8 +1,13 @@
-"""Mongo-facing data shaping.
+"""Firestore-facing data shaping.
 
-Every function here takes the `items` collection (or a raw doc) as a plain
-argument rather than owning a connection — the connection's lifecycle
-belongs to server.py.
+Every function here takes the `items` collection reference as a plain
+argument rather than owning a client — the client's lifecycle belongs to
+__init__.py.
+
+Firestore has no distinct()/aggregation query worth using for a personal
+closet's worth of data (dozens to a few hundred docs), so the vocab
+helpers below just fetch the whole collection and compute in Python —
+simpler than replicating Mongo's distinct() and plenty fast at this scale.
 """
 
 from pathlib import Path
@@ -12,8 +17,19 @@ OCCASIONS = ["casual", "formal", "athletic", "going-out"]
 CONDITIONS = ["good", "needs-repair"]
 
 
+def _as_list(value) -> list:
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
 def distinct_values(items, field: str) -> list[str]:
-    values = {v.strip() for v in items.distinct(field) if isinstance(v, str) and v.strip()}
+    values = {
+        v.strip()
+        for doc in items.stream()
+        for v in _as_list(doc.to_dict().get(field))
+        if isinstance(v, str) and v.strip()
+    }
     return sorted(values, key=str.lower)
 
 
@@ -36,9 +52,9 @@ def category_vocab(items) -> list[str]:
 
 
 def normalize_item(item: dict) -> dict:
-    """Canonicalize a raw Mongo doc (or {} for an untagged item) into the
-    shape search/render code can rely on, without each caller re-deriving
-    legacy-field quirks.
+    """Canonicalize a raw Firestore doc (or {} for an untagged item) into
+    the shape search/render code can rely on, without each caller
+    re-deriving legacy-field quirks.
 
     Note: this does NOT default `condition` to ["good"] — that's a form-UX
     default for the edit page, not real data, so an untagged item's
@@ -85,8 +101,21 @@ EMPTY_ITEM = normalize_item({})
 
 
 def fetch_items_map(images: list[Path], items) -> dict[str, dict]:
-    """One bulk query for every image's item doc, normalized. Images with
-    no doc simply have no key — use EMPTY_ITEM as the .get() fallback."""
-    names = [p.name for p in images]
-    docs = items.find({"_id": {"$in": names}})
-    return {doc["_id"]: normalize_item(doc) for doc in docs}
+    """One collection scan for every image's item doc, normalized. Images
+    with no doc simply have no key — use EMPTY_ITEM as the .get() fallback."""
+    names = {p.name for p in images}
+    return {
+        doc.id: normalize_item(doc.to_dict())
+        for doc in items.stream()
+        if doc.id in names
+    }
+
+
+def upsert_item(items, name: str, fields: dict, created_at: str) -> None:
+    """$set + $setOnInsert-style upsert: overwrite the given fields, but
+    only stamp created_at if the doc doesn't already exist (Firestore's
+    merge=True doesn't distinguish "new doc" from "existing doc" itself)."""
+    doc_ref = items.document(name)
+    if not doc_ref.get().exists:
+        fields = {**fields, "created_at": created_at}
+    doc_ref.set(fields, merge=True)

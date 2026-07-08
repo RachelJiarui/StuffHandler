@@ -123,7 +123,8 @@ def format_created(created_raw: str | None) -> str:
 def edit(name: str):
     candidate = image_or_404(name)
     coll = items_coll()
-    item = db.normalize_item(coll.find_one({"_id": candidate.name}) or {})
+    snap = coll.document(candidate.name).get()
+    item = db.normalize_item(snap.to_dict() if snap.exists else {})
 
     images = find_images(photos_dir())
     items_map = db.fetch_items_map(images, coll)
@@ -186,15 +187,9 @@ def parse_item_fields(form) -> dict:
 def edit_save(name: str):
     candidate = image_or_404(name)
 
-    items_coll().update_one(
-        {"_id": candidate.name},
-        {
-            "$set": parse_item_fields(request.form),
-            "$setOnInsert": {
-                "created_at": datetime.now(timezone.utc).isoformat()
-            },
-        },
-        upsert=True,
+    db.upsert_item(
+        items_coll(), candidate.name, parse_item_fields(request.form),
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
 
     if request.headers.get("X-Requested-With") == "fetch":

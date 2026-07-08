@@ -1,9 +1,10 @@
 """Background processing for uploaded photos.
 
 A tiny in-process job runner: a queue plus a few daemon worker threads,
-started lazily on the first job. Job state lives in the Mongo `uploads`
-collection so status polling works from any web process; the threads
-themselves run in whichever process accepted the upload/redo request.
+started lazily on the first job. Job state lives in the Firestore
+`uploads` collection so status polling works from any web process; the
+threads themselves run in whichever process accepted the upload/redo
+request.
 
 Heavy resources are created once, on first use: the rembg session (slow
 import + model load) and the OpenAI client. Their imports are deferred so
@@ -17,6 +18,8 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from PIL import Image
 
 STALE_ERROR = "Interrupted by a server restart — redo to retry."
@@ -26,20 +29,31 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def mark_stale_jobs(uploads) -> None:
+def mark_stale_jobs(client, uploads) -> None:
     """Jobs live in worker threads, so a restart silently drops any that
     were mid-flight — surface them as failed instead of spinning forever."""
-    uploads.update_many(
-        {"status": "processing"},
-        {
-            "$set": {"status": "failed", "error": STALE_ERROR, "updated_at": now_iso()},
-            "$unset": {"prev": "", "run_token": ""},
-        },
-    )
+    stale = list(uploads.where(filter=FieldFilter("status", "==", "processing")).stream())
+    if not stale:
+        return
+    batch = client.batch()
+    for doc in stale:
+        batch.set(
+            doc.reference,
+            {
+                "status": "failed",
+                "error": STALE_ERROR,
+                "updated_at": now_iso(),
+                "prev": firestore.DELETE_FIELD,
+                "run_token": firestore.DELETE_FIELD,
+            },
+            merge=True,
+        )
+    batch.commit()
 
 
 class UploadProcessor:
-    def __init__(self, uploads, originals_dir: Path, processed_dir: Path, workers: int = 3):
+    def __init__(self, client, uploads, originals_dir: Path, processed_dir: Path, workers: int = 3):
+        self.client = client
         self.uploads = uploads
         self.originals_dir = originals_dir
         self.processed_dir = processed_dir
@@ -96,16 +110,19 @@ class UploadProcessor:
                 pass
 
     def _run(self, upload_id: str) -> None:
-        doc = self.uploads.find_one({"_id": upload_id})
-        if not doc or doc.get("status") != "processing":
-            return  # deleted or stopped while queued
+        snap = self.uploads.document(upload_id).get()
+        if not snap.exists:
+            return  # deleted while queued
+        doc = snap.to_dict()
+        if doc.get("status") != "processing":
+            return  # stopped while queued
         # The run token ties this job to the doc state that enqueued it: if
         # the run is stopped (or superseded) while we work, the token no
         # longer matches and the result is discarded instead of clobbering
         # the reverted doc / previous processed file.
         token = doc.get("run_token")
         try:
-            png = self._process(doc)
+            png = self._process(doc, upload_id)
         except Exception as e:
             self._finish(upload_id, token, error=str(e) or type(e).__name__)
             return
@@ -118,25 +135,38 @@ class UploadProcessor:
 
     def _finish(self, upload_id: str, token, error: str | None) -> bool:
         """Complete the run — but only if it wasn't stopped/superseded
-        meanwhile. Returns whether this run still owned the doc."""
-        result = self.uploads.update_one(
-            {"_id": upload_id, "status": "processing", "run_token": token},
-            {
-                "$set": {
+        meanwhile (checked and written atomically in one transaction).
+        Returns whether this run still owned the doc."""
+        doc_ref = self.uploads.document(upload_id)
+
+        @firestore.transactional
+        def _txn(transaction) -> bool:
+            snap = doc_ref.get(transaction=transaction)
+            if not snap.exists:
+                return False
+            doc = snap.to_dict()
+            if doc.get("status") != "processing" or doc.get("run_token") != token:
+                return False
+            transaction.set(
+                doc_ref,
+                {
                     "status": "failed" if error else "done",
                     "error": error,
                     "updated_at": now_iso(),
+                    "prev": firestore.DELETE_FIELD,
+                    "run_token": firestore.DELETE_FIELD,
                 },
-                "$unset": {"prev": "", "run_token": ""},
-            },
-        )
-        return result.modified_count == 1
+                merge=True,
+            )
+            return True
+
+        return _txn(self.client.transaction())
 
     # -- the actual pipeline ---------------------------------------------------
 
-    def _process(self, doc: dict) -> bytes:
+    def _process(self, doc: dict, upload_id: str) -> bytes:
         if doc["source"] == "processed":
-            src = self.processed_dir / f"{doc['_id']}.png"
+            src = self.processed_dir / f"{upload_id}.png"
         else:
             src = self.originals_dir / doc["original_file"]
         # Read fully into memory: when redoing from "processed" the output

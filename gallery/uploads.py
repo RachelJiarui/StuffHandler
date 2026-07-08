@@ -23,6 +23,7 @@ from flask import (
     send_file,
     url_for,
 )
+from google.cloud import firestore
 from PIL import Image, ImageOps
 
 from . import db
@@ -47,6 +48,10 @@ def coll():
     return current_app.extensions["gallery_uploads"]
 
 
+def firestore_client():
+    return current_app.extensions["gallery_firestore"]
+
+
 def processor():
     return current_app.extensions["gallery_processor"]
 
@@ -59,13 +64,19 @@ def processed_dir() -> Path:
     return current_app.config["UPLOADS_DIR"] / "processed"
 
 
+def _to_dict(snap) -> dict:
+    d = snap.to_dict()
+    d["_id"] = snap.id
+    return d
+
+
 def doc_or_404(upload_id: str) -> dict:
     if not ID_RE.fullmatch(upload_id):
         abort(400)
-    doc = coll().find_one({"_id": upload_id})
-    if not doc:
+    snap = coll().document(upload_id).get()
+    if not snap.exists:
         abort(404)
-    return doc
+    return _to_dict(snap)
 
 
 def save_original(file_storage) -> tuple[str, str]:
@@ -98,9 +109,13 @@ def run_summary(doc: dict) -> str:
 
 
 def staged_docs() -> list[dict]:
-    docs = list(
-        coll().find({"status": {"$ne": "finalized"}}).sort("created_at", -1)
-    )
+    # Firestore's inequality-filter rule (first order_by must match the
+    # filtered field) doesn't fit "status != finalized, sorted by
+    # created_at" — this collection is small (a personal upload queue),
+    # so filter/sort in Python instead of fighting the query planner.
+    docs = [_to_dict(snap) for snap in coll().stream()]
+    docs = [d for d in docs if d.get("status") != "finalized"]
+    docs.sort(key=lambda d: d.get("created_at", ""), reverse=True)
     for d in docs:
         d["id"] = d["_id"]
         d["has_processed"] = (processed_dir() / f"{d['_id']}.png").exists()
@@ -152,8 +167,7 @@ def upload():
         except Exception as e:
             errors.append({"filename": f.filename, "error": f"couldn't read image ({e})"})
             continue
-        coll().insert_one({
-            "_id": upload_id,
+        coll().document(upload_id).set({
             "original_filename": f.filename,
             "original_file": disk_name,
             "status": "processing",
@@ -207,15 +221,17 @@ def redo():
         upload_id = str(upload_id)
         if not ID_RE.fullmatch(upload_id):
             continue
-        doc = coll().find_one({"_id": upload_id})
-        if not doc or doc["status"] in ("finalized", "processing"):
+        snap = coll().document(upload_id).get()
+        if not snap.exists:
+            continue
+        doc = snap.to_dict()
+        if doc.get("status") in ("finalized", "processing"):
             continue
         if source == "processed" and not (processed_dir() / f"{upload_id}.png").exists():
             errors.append({"id": upload_id, "error": "no processed version to redo from"})
             continue
-        coll().update_one(
-            {"_id": upload_id},
-            {"$set": {
+        coll().document(upload_id).set(
+            {
                 "status": "processing",
                 "error": None,
                 "enhance": enhance,
@@ -225,15 +241,16 @@ def redo():
                 "run_token": uuid.uuid4().hex,
                 # Snapshot of the pre-run state so Stop can revert to it.
                 "prev": {
-                    "status": doc["status"],
+                    "status": doc.get("status"),
                     "error": doc.get("error"),
-                    "enhance": doc["enhance"],
-                    "remove_bg": doc["remove_bg"],
+                    "enhance": doc.get("enhance"),
+                    "remove_bg": doc.get("remove_bg"),
                     "message": doc.get("message", ""),
                     "source": doc.get("source", "original"),
                 },
                 "updated_at": now_iso(),
-            }},
+            },
+            merge=True,
         )
         processor().enqueue(upload_id)
 
@@ -245,26 +262,43 @@ def stop():
     """Stop an in-flight run: revert the doc to its pre-run state (first
     runs, which have nothing to revert to, become failed). The worker
     thread can't abort a pipeline call mid-flight, but the run token no
-    longer matches so its result is discarded when it finishes."""
+    longer matches so its result is discarded when it finishes.
+
+    Checked and written atomically in one transaction, guarding against
+    the run finishing on its own in the moment between our status read
+    and this write."""
     data = request.get_json(silent=True) or {}
+    client = firestore_client()
     for upload_id in data.get("ids") or []:
         upload_id = str(upload_id)
         if not ID_RE.fullmatch(upload_id):
             continue
-        doc = coll().find_one({"_id": upload_id})
-        if not doc or doc["status"] != "processing":
-            continue
-        restored = doc.get("prev") or {
-            "status": "failed",
-            "error": "Stopped — redo to retry.",
-        }
-        coll().update_one(
-            {"_id": upload_id, "status": "processing"},
-            {
-                "$set": {**restored, "updated_at": now_iso()},
-                "$unset": {"prev": "", "run_token": ""},
-            },
-        )
+        doc_ref = coll().document(upload_id)
+
+        @firestore.transactional
+        def _txn(transaction, doc_ref=doc_ref):
+            snap = doc_ref.get(transaction=transaction)
+            if not snap.exists:
+                return
+            doc = snap.to_dict()
+            if doc.get("status") != "processing":
+                return
+            restored = doc.get("prev") or {
+                "status": "failed",
+                "error": "Stopped — redo to retry.",
+            }
+            transaction.set(
+                doc_ref,
+                {
+                    **restored,
+                    "updated_at": now_iso(),
+                    "prev": firestore.DELETE_FIELD,
+                    "run_token": firestore.DELETE_FIELD,
+                },
+                merge=True,
+            )
+
+        _txn(client.transaction())
     return jsonify(queue_payload())
 
 
@@ -275,11 +309,14 @@ def delete():
         upload_id = str(upload_id)
         if not ID_RE.fullmatch(upload_id):
             continue
-        doc = coll().find_one({"_id": upload_id})
-        # Processing photos are untouchable — they must be stopped first.
-        if not doc or doc["status"] in ("finalized", "processing"):
+        snap = coll().document(upload_id).get()
+        if not snap.exists:
             continue
-        coll().delete_one({"_id": upload_id})
+        doc = snap.to_dict()
+        # Processing photos are untouchable — they must be stopped first.
+        if doc.get("status") in ("finalized", "processing"):
+            continue
+        coll().document(upload_id).delete()
         (originals_dir() / doc["original_file"]).unlink(missing_ok=True)
         (processed_dir() / f"{upload_id}.png").unlink(missing_ok=True)
     return jsonify(queue_payload())
@@ -324,16 +361,12 @@ def label_save(upload_id: str):
         n += 1
     shutil.move(processed, final)
 
-    current_app.extensions["gallery_items"].update_one(
-        {"_id": final.name},
-        {
-            "$set": fields,
-            "$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()},
-        },
-        upsert=True,
+    db.upsert_item(
+        current_app.extensions["gallery_items"], final.name, fields,
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
-    coll().update_one(
-        {"_id": upload_id},
-        {"$set": {"status": "finalized", "final_name": final.name, "updated_at": now_iso()}},
+    coll().document(upload_id).set(
+        {"status": "finalized", "final_name": final.name, "updated_at": now_iso()},
+        merge=True,
     )
     return redirect(url_for("uploads.page"), code=303)

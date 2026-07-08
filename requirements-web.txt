@@ -3,7 +3,7 @@
 # The upload page runs the processing pipeline in-process (background
 # threads), so the pipeline deps from requirements.txt are needed here too.
 flask>=3.0
-pymongo
+google-cloud-firestore
 python-dotenv
 gunicorn
 Pillow>=10.0
