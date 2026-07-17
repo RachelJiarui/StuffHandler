@@ -6,12 +6,11 @@ from openai import OpenAI, RateLimitError
 from PIL import Image
 
 DEFAULT_PROMPT = (
-    "Professional photo-realistic product photo of this clothing item. "
-    "Remove the clothing hanger and wall hook."
+    "Professional photo-realistic product photo of this item. "
+    "Remove extraneous parts unrelated to the product like clothing hanger, wall hooks, etc."
     "Preserve all fabric textures, patterns, and construction details. "
     "Fix uneven draping and remove harsh shadows. "
-    "Slightly emphasize defining details — buttons, stitching, texture patterns — so they read clearly at a glance. "
-    "Preserve exact sleeve length; If the sleeves do not pass the end of the shirt, it must be shorter sleeves. Both sleeves must be symmetrical. "
+    "Slightly emphasize defining details — buttons, stitching, texture patterns, text — so they read clearly at a glance. "
     "Preserve all lettering and designs 100%."
     "Background: solid white or black or hot pink, whichever contrasts best with the garment. "
     "Lighting: bright, clean, and even studio light."
